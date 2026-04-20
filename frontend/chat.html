@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Chat — Inkwell</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    tailwind.config = { darkMode: "class", theme: { extend: { colors: {
+      primary: { 50:'#f5f3ff',100:'#ede9fe',200:'#ddd6fe',500:'#7c3aed',600:'#6d28d9',700:'#5b21b6',800:'#4c1d95',900:'#2e1065' },
+      accent: { 400:'#fbbf24',500:'#f59e0b',600:'#d97706' },
+      ink: { 50:'#faf9f7',100:'#f5f5f4',200:'#e7e5e4',700:'#44403c',800:'#292524',900:'#1c1917',950:'#0c0a09' }
+    }, fontFamily: { sans:['Inter','system-ui','sans-serif'], mono:['JetBrains Mono','Menlo','monospace'] },
+    animation: { 'fade-in':'fadeIn 0.4s ease-out','slide-up':'slideUp 0.3s ease-out' },
+    keyframes: { fadeIn:{ '0%':{opacity:'0'},'100%':{opacity:'1'} }, slideUp:{ '0%':{opacity:'0',transform:'translateY(8px)'},'100%':{opacity:'1',transform:'translateY(0)'} } } } } };
+  </script>
+  <style>
+    * { transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
+    @keyframes toast-in { 0%{transform:translateX(100%);opacity:0} 100%{transform:translateX(0);opacity:1} }
+    .toast-enter { animation: toast-in 0.3s ease-out; }
+    .typing-dot { width:8px;height:8px;border-radius:50%;background:#a8a29e;animation:bounce 1.4s infinite ease-in-out; }
+    .typing-dot:nth-child(1){animation-delay:0s} .typing-dot:nth-child(2){animation-delay:0.2s} .typing-dot:nth-child(3){animation-delay:0.4s}
+    @keyframes bounce { 0%,80%,100%{transform:scale(0)} 40%{transform:scale(1)} }
+    .msg-content pre { background:rgba(0,0,0,0.06); padding:0.75rem; border-radius:0.5rem; overflow-x:auto; font-size:0.875rem; margin:0.5rem 0; }
+    .msg-content code { background:rgba(0,0,0,0.06); padding:0.125rem 0.375rem; border-radius:0.25rem; font-size:0.875rem; }
+    .msg-content pre code { background:none; padding:0; }
+    .msg-content ul,.msg-content ol { padding-left:1.25rem; margin:0.5rem 0; }
+    .msg-content li { margin:0.25rem 0; }
+    .msg-content h1,.msg-content h2,.msg-content h3 { font-weight:700; margin:0.75rem 0 0.375rem; }
+    .msg-content h1 { font-size:1.25rem; } .msg-content h2 { font-size:1.125rem; } .msg-content h3 { font-size:1rem; }
+    .msg-content p { margin:0.375rem 0; }
+    .msg-content blockquote { border-left:3px solid #7c3aed; padding-left:0.75rem; margin:0.5rem 0; color:#78716c; }
+    .msg-content a { color:#7c3aed; text-decoration:underline; }
+    #chatInput { resize:none; min-height:44px; max-height:200px; }
+    .msg-actions { opacity:0; transition:opacity 0.2s ease; }
+    .msg-wrap:hover .msg-actions { opacity:1; }
+  </style>
+</head>
+<body class="bg-ink-50 dark:bg-ink-950 text-ink-900 dark:text-ink-50 min-h-screen flex flex-col">
+  <header class="bg-white dark:bg-ink-900 shadow-sm border-b border-ink-200 dark:border-ink-700 px-4 py-3 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <span class="text-lg font-bold text-primary-600 dark:text-primary-200 flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+        Chat
+      </span>
+      <select id="templateSelect" class="text-sm border border-ink-200 dark:border-ink-700 rounded-lg px-2 py-1 bg-white dark:bg-ink-800 focus:ring-2 focus:ring-primary-500">
+        <option value="default">General</option><option value="creative">Creative</option><option value="academic">Academic</option><option value="professional">Professional</option><option value="blog">Blog</option><option value="social">Social</option>
+      </select>
+    </div>
+    <div class="flex items-center gap-3">
+      <select id="modelSelect" class="text-sm border border-ink-200 dark:border-ink-700 rounded-lg px-2 py-1 bg-white dark:bg-ink-800 focus:ring-2 focus:ring-primary-500">
+        <option value="gpt-3.5-turbo">GPT-3.5</option><option value="gpt-4">GPT-4</option><option value="gpt-4-turbo">GPT-4 Turbo</option>
+      </select>
+      <input id="tempSlider" type="range" min="0" max="200" value="70" class="w-20 hidden sm:block accent-primary-600" title="Temperature" />
+      <span id="tempLabel" class="text-xs text-ink-700 dark:text-ink-200 hidden sm:inline w-6">0.7</span>
+      <button id="darkToggle" class="p-2 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-700 dark:text-ink-200"><span id="darkIcon" class="text-xl">&#9790;</span></button>
+      <button id="clearBtn" class="px-3 py-1 text-sm bg-ink-100 dark:bg-ink-800 rounded-lg hover:bg-ink-200 dark:hover:bg-ink-700">Clear</button>
+    </div>
+  </header>
+
+  <div id="chatMessages" class="flex-1 overflow-y-auto px-4 py-6 space-y-4 max-w-4xl w-full mx-auto">
+    <div id="welcomeMsg" class="text-center py-20 animate-fade-in">
+      <div class="text-6xl mb-4">&#9997;&#65039;</div>
+      <h2 class="text-2xl font-bold mb-2 font-sans">How can I help you write?</h2>
+      <p class="text-ink-700 dark:text-ink-200">Type a message below to start your writing session</p>
+    </div>
+  </div>
+
+  <div id="typingIndicator" class="hidden max-w-4xl mx-auto w-full px-4 pb-2">
+    <div class="flex items-center gap-2 text-ink-700 dark:text-ink-200 text-sm"><div class="flex gap-1"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div><span>AI is writing...</span></div>
+  </div>
+
+  <div class="bg-white dark:bg-ink-900 border-t border-ink-200 dark:border-ink-700 px-4 py-3 shrink-0">
+    <div class="max-w-4xl mx-auto flex items-end gap-3">
+      <textarea id="chatInput" rows="1" placeholder="Describe what you want to write..." class="flex-1 px-4 py-2 border border-ink-200 dark:border-ink-700 rounded-xl bg-white dark:bg-ink-800 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm font-sans"></textarea>
+      <button id="sendBtn" class="px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 font-medium text-sm disabled:opacity-50 transition-colors">Send</button>
+    </div>
+  </div>
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2 w-80"></div>
+
+  <script>
+    (function () {
+      "use strict";
+      const API_BASE = "/api", TK = "builddy_access_token";
+      let messages = [], isStreaming = false;
+      const $m = document.getElementById("chatMessages"), $i = document.getElementById("chatInput"),
+            $s = document.getElementById("sendBtn"), $t = document.getElementById("typingIndicator"),
+            $model = document.getElementById("modelSelect"), $tpl = document.getElementById("templateSelect"),
+            $temp = document.getElementById("tempSlider"), $tempL = document.getElementById("tempLabel");
+
+      if (typeof marked !== 'undefined') { marked.setOptions({ breaks: true, gfm: true }); }
+
+      function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+      function renderMd(text) {
+        if (typeof marked !== 'undefined') { try { return marked.parse(text); } catch(e) {} }
+        return text.replace(/```(\w*)\n([\s\S]*?)```/g,"<pre><code>$2</code></pre>").replace(/`([^`]+)`/g,"<code>$1</code>")
+          .replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/\*(.+?)\*/g,"<em>$1</em>").replace(/\n/g,"<br>");
+      }
+      function countWords(text) { return text.trim().split(/\s+/).filter(Boolean).length; }
+      function toast(msg, type="info") {
+        const c = document.getElementById("toastContainer"),
+              colors = { success:"bg-emerald-500", error:"bg-red-500", info:"bg-primary-600" };
+        const t = document.createElement("div");
+        t.className = `${colors[type]||colors.info} text-white px-4 py-3 rounded-lg shadow-lg toast-enter text-sm`;
+        t.textContent = msg; c.appendChild(t); setTimeout(() => t.remove(), 3000);
+      }
+      function scroll() { $m.scrollTop = $m.scrollHeight; }
+
+      function actionButtons() {
+        return `<div class="msg-actions flex items-center gap-1 mt-2 pt-2 border-t border-ink-200/50 dark:border-ink-700/50">
+          <button onclick="window.__chatCopy(this)" class="flex items-center gap-1 px-2 py-1 text-xs rounded-md hover:bg-ink-100 dark:hover:bg-ink-800 text-ink-700 dark:text-ink-200" title="Copy response">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            Copy
+          </button>
+          <button onclick="window.__chatInsert(this)" class="flex items-center gap-1 px-2 py-1 text-xs rounded-md hover:bg-primary-50 dark:hover:bg-primary-900/30 text-primary-600 dark:text-primary-300 font-medium" title="Insert into document">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Insert to Document
+          </button>
+        </div>`;
+      }
+
+      function addMsg(role, content) {
+        const w = document.getElementById("welcomeMsg"); if (w) w.remove();
+        const isUser = role === "user";
+        const d = document.createElement("div");
+        d.className = `msg-wrap flex ${isUser ? "justify-end" : "justify-start"} animate-fade-in`;
+        const bubbleClass = isUser
+          ? "bg-white dark:bg-ink-800 border-2 border-primary-600 dark:border-primary-500 text-primary-600 dark:text-primary-200"
+          : "bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800/40 text-ink-900 dark:text-ink-50";
+        const labelClass = isUser ? "text-primary-400 dark:text-primary-300" : "text-ink-700 dark:text-ink-200";
+        d.innerHTML = `<div class="max-w-[85%] ${bubbleClass} rounded-2xl px-4 py-3 shadow-sm">
+          <div class="text-xs font-medium ${labelClass} mb-1">${isUser ? "You" : "Inkwell AI"}</div>
+          <div class="msg-content text-sm leading-relaxed">${isUser ? esc(content) : renderMd(content)}</div>
+          ${!isUser ? actionButtons() : ''}</div>`;
+        $m.appendChild(d); scroll(); return d;
+      }
+
+      function streamEl() {
+        const w = document.getElementById("welcomeMsg"); if (w) w.remove();
+        const d = document.createElement("div"); d.className = "msg-wrap flex justify-start animate-fade-in";
+        d.innerHTML = `<div class="max-w-[85%] bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800/40 rounded-2xl px-4 py-3 shadow-sm">
+          <div class="text-xs font-medium text-ink-700 dark:text-ink-200 mb-1">Inkwell AI</div>
+          <div class="msg-content text-sm leading-relaxed text-ink-900 dark:text-ink-50" id="sc"></div></div>`;
+        $m.appendChild(d); scroll(); return document.getElementById("sc");
+      }
+
+      function onStreamComplete(fullText) {
+        const sc = document.getElementById("sc");
+        if (sc) {
+          const wrap = sc.closest(".msg-wrap");
+          sc.removeAttribute("id");
+          if (wrap) {
+            const inner = wrap.querySelector(".msg-content").parentElement;
+            const actDiv = document.createElement("div");
+            actDiv.innerHTML = actionButtons();
+            inner.appendChild(actDiv.firstElementChild);
+          }
+        }
+        const wc = countWords(fullText);
+        if (typeof window.__onChatResponse === 'function') {
+          window.__onChatResponse(fullText, wc);
+        }
+        const evt = new CustomEvent('inkwell:chatResponse', { detail: { content: fullText, wordCount: wc } });
+        window.dispatchEvent(evt);
+      }
+
+      async function send() {
+        const text = $i.value.trim(); if (!text || isStreaming) return;
+        if (!localStorage.getItem(TK)) { toast("Please log in", "error"); window.location.href = "/"; return; }
+        isStreaming = true; $s.disabled = true; $i.value = ""; $i.style.height = "auto";
+        addMsg("user", text); messages.push({ role: "user", content: text });
+        $t.classList.remove("hidden"); scroll();
+        try {
+          const r = await fetch(`${API_BASE}/ai/chat`, {
+            method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem(TK)}` },
+            body: JSON.stringify({ messages, model: $model.value, temperature: parseInt($temp.value) / 100, stream: true, template: $tpl.value })
+          });
+          $t.classList.add("hidden");
+          if (!r.ok) { const e = await r.json().catch(() => ({})); addMsg("assistant", "Error: " + (e.error || r.statusText)); toast(e.error || "Failed", "error"); return; }
+          const el = streamEl(); let full = "";
+          const reader = r.body.getReader(), dec = new TextDecoder();
+          while (true) {
+            const { done, value } = await reader.read(); if (done) break;
+            const chunk = dec.decode(value, { stream: true }), lines = chunk.split("\n");
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const d = line.slice(6).trim(); if (d === "[DONE]") break;
+                try { const p = JSON.parse(d), c = p.choices?.[0]?.delta?.content || ""; if (c) { full += c; el.innerHTML = renderMd(full); scroll(); } } catch {}
+              }
+            }
+          }
+          messages.push({ role: "assistant", content: full });
+          onStreamComplete(full);
+        } catch (err) { $t.classList.add("hidden"); addMsg("assistant", "Error: " + err.message); toast(err.message, "error"); }
+        finally { isStreaming = false; $s.disabled = false; $i.focus(); }
+      }
+
+      window.__chatCopy = function (btn) {
+        const content = btn.closest(".msg-wrap").querySelector(".msg-content").innerText;
+        navigator.clipboard.writeText(content).then(() => toast("Copied to clipboard", "success")).catch(() => toast("Copy failed", "error"));
+      };
+      window.__chatInsert = function (btn) {
+        const content = btn.closest(".msg-wrap").querySelector(".msg-content").innerText;
+        if (typeof window.__insertToDocument === 'function') {
+          window.__insertToDocument(content);
+          toast("Inserted into document", "success");
+        } else {
+          const evt = new CustomEvent('inkwell:insertToDoc', { detail: { content } });
+          window.dispatchEvent(evt);
+          toast("Sent to document", "info");
+        }
+      };
+
+      $i.addEventListener("input", () => { $i.style.height = "auto"; $i.style.height = Math.min($i.scrollHeight, 200) + "px"; });
+      $i.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+      $s.addEventListener("click", send);
+      $temp.addEventListener("input", () => { $tempL.textContent = (parseInt($temp.value) / 100).toFixed(1); });
+      document.getElementById("clearBtn").addEventListener("click", () => {
+        messages = [];
+        $m.innerHTML = `<div id="welcomeMsg" class="text-center py-20 animate-fade-in"><div class="text-6xl mb-4">&#9997;&#65039;</div><h2 class="text-2xl font-bold mb-2 font-sans">How can I help you write?</h2><p class="text-ink-700 dark:text-ink-200">Type a message below to start your writing session</p></div>`;
+      });
+
+      const saved = localStorage.getItem("builddy-dark"), icon = document.getElementById("darkIcon");
+      if (saved === "false") { document.documentElement.classList.remove("dark"); icon.textContent = "\u2600"; }
+      document.getElementById("darkToggle").addEventListener("click", () => {
+        const d = document.documentElement.classList.toggle("dark");
+        localStorage.setItem("builddy-dark", d); icon.textContent = d ? "\u263E" : "\u2600";
+      });
+
+      if (!localStorage.getItem(TK)) {
+        $m.innerHTML = `<div class="text-center py-20"><div class="text-6xl mb-4">&#128274;</div><p class="text-ink-700 dark:text-ink-200 text-lg">Please <a href="/" class="text-primary-600 dark:text-primary-300 underline font-medium">log in</a> to start writing</p></div>`;
+        $s.disabled = true;
+      }
+      $i.focus();
+    })();
+  </script>
+</body>
+</html>

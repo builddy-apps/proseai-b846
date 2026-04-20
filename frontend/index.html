@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inkwell — AI Writing Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50:'#f5f3ff',100:'#ede9fe',200:'#ddd6fe',500:'#7c3aed',600:'#6d28d9',700:'#5b21b6',800:'#4c1d95',900:'#2e1065' },
+            accent: { 400:'#fbbf24',500:'#f59e0b',600:'#d97706' },
+            ink: { 50:'#faf9f7',100:'#f5f5f4',200:'#e7e5e4',700:'#44403c',800:'#292524',900:'#1c1917',950:'#0c0a09' }
+          },
+          fontFamily: { sans:['Inter','system-ui','sans-serif'], mono:['JetBrains Mono','Menlo','monospace'] },
+          animation: {
+            "fade-in":"fadeIn .4s ease-out","slide-up":"slideUp .3s ease-out","bounce-dot":"bounceDot 1.4s infinite ease-in-out both"
+          },
+          keyframes: {
+            fadeIn:{"0%":{opacity:"0"},"100%":{opacity:"1"}},
+            slideUp:{"0%":{opacity:"0",transform:"translateY(8px)"},"100%":{opacity:"1",transform:"translateY(0)"}},
+            bounceDot:{"0%,80%,100%":{transform:"scale(0)"},"40%":{transform:"scale(1)"}}
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    *{transition:background-color .2s,color .2s,border-color .2s}
+    .spinner{border:3px solid rgba(128,128,128,.3);border-top:3px solid #7c3aed;border-radius:50%;width:36px;height:36px;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes toast-in{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+    @keyframes toast-out{from{opacity:1}to{transform:translateX(100%);opacity:0}}
+    .toast-enter{animation:toast-in .3s ease-out}.toast-exit{animation:toast-out .3s ease-in}
+    #leftSidebar{transition:transform .3s ease}
+    @media(max-width:768px){#leftSidebar{transform:translateX(-100%);position:fixed;z-index:40;top:0;left:0;height:100vh}#leftSidebar.open{transform:translateX(0)}}
+    .mode-btn.active{color:#7c3aed;border-bottom:2px solid #7c3aed}
+    .dark .mode-btn.active{color:#ddd6fe;border-color:#7c3aed}
+    .dot-1{animation-delay:-.32s}.dot-2{animation-delay:-.16s}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#7c3aed;cursor:pointer}
+  </style>
+</head>
+<body class="bg-ink-50 dark:bg-ink-950 text-gray-900 dark:text-gray-100 h-screen flex overflow-hidden">
+
+  <div id="sidebarOverlay" class="hidden fixed inset-0 bg-black/50 z-30 md:hidden"></div>
+
+  <!-- LEFT SIDEBAR -->
+  <aside id="leftSidebar" class="w-64 bg-white dark:bg-ink-900 border-r border-ink-200 dark:border-ink-700 flex flex-col shrink-0">
+    <div class="p-4 border-b border-ink-200 dark:border-ink-700">
+      <h1 class="text-xl font-bold text-primary-600 dark:text-primary-200 flex items-center gap-2"><span>✒️</span> Inkwell</h1>
+    </div>
+    <div class="p-3 space-y-2">
+      <div class="relative"><span class="absolute left-2.5 top-2 text-gray-400 text-sm">🔍</span><input id="docSearch" type="text" placeholder="Search documents…" class="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 focus:outline-none focus:ring-2 focus:ring-primary-500"></div>
+      <button id="newDocBtn" class="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">＋ New Document</button>
+    </div>
+    <div id="docList" class="flex-1 overflow-y-auto px-3 space-y-1 text-sm"></div>
+    <div class="border-t border-ink-200 dark:border-ink-700 p-3 space-y-1">
+      <button id="templatesBtn" class="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800 text-sm">📄 Templates</button>
+      <button id="statsBtn" class="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800 text-sm">📊 Statistics</button>
+    </div>
+    <div class="p-3 border-t border-ink-200 dark:border-ink-700">
+      <div class="flex items-center gap-2 mb-2"><div class="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold" id="userAvatar">U</div><span id="userName" class="text-sm font-medium truncate flex-1">User</span></div>
+      <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Daily goal: <span id="dailyWords">0</span>/<span id="dailyGoal">500</span> words</div>
+      <div class="w-full h-1.5 bg-ink-200 dark:bg-ink-700 rounded-full overflow-hidden"><div id="goalBar" class="h-full bg-primary-500 rounded-full transition-all" style="width:0%"></div></div>
+    </div>
+  </aside>
+
+  <!-- CENTER -->
+  <div class="flex-1 flex flex-col min-w-0">
+    <!-- TOOLBAR -->
+    <header class="h-14 bg-white dark:bg-ink-900 border-b border-ink-200 dark:border-ink-700 flex items-center justify-between px-3 shrink-0">
+      <div class="flex items-center gap-1">
+        <button id="menuToggle" class="md:hidden p-2 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800 mr-1">☰</button>
+        <div id="modeSelector" class="flex items-center gap-0.5 overflow-x-auto text-sm">
+          <button data-mode="creative" class="mode-btn px-2.5 py-1 rounded-t border-b-2 border-transparent hover:bg-ink-100 dark:hover:bg-ink-800 whitespace-nowrap">🖋️ Fiction</button>
+          <button data-mode="academic" class="mode-btn px-2.5 py-1 rounded-t border-b-2 border-transparent hover:bg-ink-100 dark:hover:bg-ink-800 whitespace-nowrap">🎓 Academic</button>
+          <button data-mode="professional" class="mode-btn px-2.5 py-1 rounded-t border-b-2 border-transparent hover:bg-ink-100 dark:hover:bg-ink-800 whitespace-nowrap">✉️ Email</button>
+          <button data-mode="blog" class="mode-btn px-2.5 py-1 rounded-t border-b-2 border-transparent hover:bg-ink-100 dark:hover:bg-ink-800 whitespace-nowrap">📝 Blog</button>
+          <button data-mode="social" class="mode-btn px-2.5 py-1 rounded-t border-b-2 border-transparent hover:bg-ink-100 dark:hover:bg-ink-800 whitespace-nowrap">#️⃣ Social</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="previewToggle" class="p-1.5 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800 text-sm" title="Markdown preview">👁️</button>
+        <div class="relative">
+          <button id="exportBtn" class="p-1.5 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800 text-sm" title="Export">📤</button>
+          <div id="exportDropdown" class="hidden absolute right-0 top-8 bg-white dark:bg-ink-800 border border-ink-200 dark:border-ink-700 rounded-lg shadow-lg py-1 w-40 z-20 text-sm">
+            <button data-export="copy" class="w-full text-left px-3 py-1.5 hover:bg-ink-100 dark:hover:bg-ink-700">📋 Copy</button>
+            <button data-export="md" class="w-full text-left px-3 py-1.5 hover:bg-ink-100 dark:hover:bg-ink-700">📄 Markdown</button>
+            <button data-export="txt" class="w-full text-left px-3 py-1.5 hover:bg-ink-100 dark:hover:bg-ink-700">📝 Plain Text</button>
+          </div>
+        </div>
+        <button id="rightPanelToggle" class="p-1.5 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800 text-sm" title="Panel">⚙️</button>
+        <button id="darkToggle" class="p-1.5 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800 text-sm" title="Dark mode"><span id="darkIcon">☾</span></button>
+        <button id="logoutBtn" class="px-3 py-1 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
+      </div>
+    </header>
+
+    <!-- CHAT -->
+    <main id="chatArea" class="flex-1 overflow-y-auto p-4 space-y-4">
+      <div id="loadingState" class="flex flex-col items-center justify-center py-20"><div class="spinner mb-4"></div><p class="text-gray-500">Loading…</p></div>
+    </main>
+
+    <!-- INPUT -->
+    <div class="border-t border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-900 p-3">
+      <div class="flex items-end gap-2 max-w-4xl mx-auto">
+        <button class="p-2 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800 text-gray-400 shrink-0" title="Attach file">📎</button>
+        <textarea id="chatInput" rows="1" placeholder="Start writing… (Cmd+Enter to send)" class="flex-1 resize-none rounded-xl border border-ink-200 dark:border-ink-700 bg-ink-50 dark:bg-ink-800 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 max-h-36"></textarea>
+        <button id="sendBtn" class="p-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 shrink-0">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <aside id="rightPanel" class="hidden lg:flex w-72 bg-white dark:bg-ink-900 border-l border-ink-200 dark:border-ink-700 flex-col shrink-0 overflow-y-auto">
+    <div class="p-4 space-y-4 text-sm">
+      <h3 class="font-semibold text-xs uppercase tracking-wider text-gray-500">Metrics</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="p-2 rounded-lg bg-ink-50 dark:bg-ink-800"><div class="text-xs text-gray-500">Words</div><div id="wordCount" class="text-lg font-bold text-primary-600 dark:text-primary-200">0</div></div>
+        <div class="p-2 rounded-lg bg-ink-50 dark:bg-ink-800"><div class="text-xs text-gray-500">Characters</div><div id="charCount" class="text-lg font-bold">0</div></div>
+        <div class="p-2 rounded-lg bg-ink-50 dark:bg-ink-800"><div class="text-xs text-gray-500">Readability</div><div id="readability" class="text-lg font-bold">—</div></div>
+        <div class="p-2 rounded-lg bg-ink-50 dark:bg-ink-800"><div class="text-xs text-gray-500">Read time</div><div id="readTime" class="text-lg font-bold">0m</div></div>
+      </div>
+      <div class="space-y-3">
+        <div><label class="text-xs text-gray-500 flex justify-between"><span>Casual</span><span>Formal</span></label><input id="toneSlider" type="range" min="0" max="100" value="50" class="w-full h-1.5 bg-ink-200 dark:bg-ink-700 rounded-full appearance-none cursor-pointer"></div>
+        <div><label class="text-xs text-gray-500 flex justify-between"><span>Concise</span><span>Descriptive</span></label><input id="styleSlider" type="range" min="0" max="100" value="50" class="w-full h-1.5 bg-ink-200 dark:bg-ink-700 rounded-full appearance-none cursor-pointer"></div>
+      </div>
+      <details class="group"><summary class="cursor-pointer text-xs uppercase tracking-wider text-gray-500 font-semibold select-none">Session History</summary>
+        <div id="sessionHistory" class="mt-2 space-y-1.5 text-xs text-gray-500 max-h-48 overflow-y-auto"><p class="italic">No messages yet</p></div>
+      </details>
+    </div>
+  </aside>
+
+  <!-- TEMPLATE MODAL -->
+  <div id="templateModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white dark:bg-ink-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto m-4 p-6 animate-fade-in">
+      <div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold">Template Library</h2><button id="closeTemplates" class="p-1 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800">✕</button></div>
+      <div id="templateGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </div>
+  </div>
+
+  <!-- ONBOARDING MODAL -->
+  <div id="onboardingModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white dark:bg-ink-900 rounded-2xl shadow-2xl w-full max-w-md m-4 p-6 animate-fade-in">
+      <div id="onbStep1" class="space-y-4">
+        <h2 class="text-lg font-bold">Welcome to Inkwell! ✒️</h2><p class="text-sm text-gray-500">Step 1 of 3 — What's your primary use case?</p>
+        <div class="grid grid-cols-1 gap-2" id="useCaseGrid">
+          <button data-case="creative" class="ob-case p-3 rounded-lg border border-ink-200 dark:border-ink-700 text-left hover:border-primary-500 text-sm">🖋️ Creative Fiction</button>
+          <button data-case="academic" class="ob-case p-3 rounded-lg border border-ink-200 dark:border-ink-700 text-left hover:border-primary-500 text-sm">🎓 Academic Papers</button>
+          <button data-case="professional" class="ob-case p-3 rounded-lg border border-ink-200 dark:border-ink-700 text-left hover:border-primary-500 text-sm">✉️ Professional Emails</button>
+          <button data-case="blog" class="ob-case p-3 rounded-lg border border-ink-200 dark:border-ink-700 text-left hover:border-primary-500 text-sm">📝 Blog Posts</button>
+          <button data-case="social" class="ob-case p-3 rounded-lg border border-ink-200 dark:border-ink-700 text-left hover:border-primary-500 text-sm">#️⃣ Social Media</button>
+        </div>
+        <button id="onbNext1" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-40" disabled>Next</button>
+      </div>
+      <div id="onbStep2" class="hidden space-y-4">
+        <h2 class="text-lg font-bold">Set Your Daily Goal</h2><p class="text-sm text-gray-500">Step 2 of 3 — How many words per day?</p>
+        <input id="goalSlider" type="range" min="100" max="5000" step="100" value="500" class="w-full"><div class="text-center text-2xl font-bold text-primary-600"><span id="goalDisplay">500</span> words/day</div>
+        <button id="onbNext2" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">Next</button>
+      </div>
+      <div id="onbStep3" class="hidden space-y-4">
+        <h2 class="text-lg font-bold">Default Tone</h2><p class="text-sm text-gray-500">Step 3 of 3 — Pick your default tone</p>
+        <select id="defaultTone" class="w-full border border-ink-200 dark:border-ink-700 rounded-lg bg-ink-50 dark:bg-ink-800 px-3 py-2 text-sm"><option value="casual">Casual</option><option value="balanced" selected>Balanced</option><option value="formal">Formal</option></select>
+        <button id="onbFinish" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">Start Writing ✨</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS MODAL -->
+  <div id="statsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white dark:bg-ink-900 rounded-2xl shadow-2xl w-full max-w-lg m-4 p-6 animate-fade-in">
+      <div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold">📊 Writing Statistics</h2><button id="closeStats" class="p-1 rounded-lg hover:bg-ink-100 dark:hover:bg-ink-800">✕</button></div>
+      <div class="grid grid-cols-3 gap-3 mb-4 text-center">
+        <div class="p-3 rounded-lg bg-ink-50 dark:bg-ink-800"><div class="text-xs text-gray-500">Total Words</div><div id="statTotal" class="text-xl font-bold">0</div></div>
+        <div class="p-3 rounded-lg bg-ink-50 dark:bg-ink-800"><div class="text-xs text-gray-500">🔥 Streak</div><div id="statStreak" class="text-xl font-bold">0 days</div></div>
+        <div class="p-3 rounded-lg bg-ink-50 dark:bg-ink-800"><div class="text-xs text-gray-500">Best Streak</div><div id="statBest" class="text-xl font-bold">0 days</div></div>
+      </div>
+      <div class="mb-3"><h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">Last 7 Days</h3><div id="barChart" class="flex items-end gap-1 h-28"></div></div>
+      <div class="flex items-center justify-center"><div class="w-24 h-24 rounded-full border-4 border-primary-500 flex items-center justify-center"><div class="text-center"><div id="goalPercent" class="text-lg font-bold">0%</div><div class="text-xs text-gray-500">Today</div></div></div></div>
+    </div>
+  </div>
+
+  <!-- PREVIEW PANEL -->
+  <div id="previewPanel" class="hidden fixed inset-0 z-40 bg-white dark:bg-ink-950 overflow-auto p-8"><button id="closePreview" class="fixed top-4 right-4 p-2 bg-primary-600 text-white rounded-lg">✕ Close</button><article id="previewContent" class="prose dark:prose-invert max-w-2xl mx-auto"></article></div>
+
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2 w-80"></div>
+  <script src="app.js"></script>
+</body>
+</html>

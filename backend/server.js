@@ -15,9 +15,6 @@ import { rateLimiter, requireAuth, requestLogger, corsMiddleware, sanitizeInput 
 import authRoutes from "./routes/auth.js";
 import apiRoutes from "./routes/api.js";
 import aiRoutes from "./routes/ai.js";
-import documentRoutes from "./routes/documents.js";
-import statsRoutes from "./routes/stats.js";
-import templateRoutes from "./routes/templates.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,7 +27,6 @@ const app = express();
 
 // {{MIDDLEWARE_INSERTION_POINT}}
 // Serve onboarding assets (e.g. welcome page images, tutorial files)
-app.use("/onboarding", express.static(path.join(STATIC_DIR, "onboarding")));
 
 app.use(corsMiddleware(ALLOWED_ORIGINS));
 app.use(requestLogger);
@@ -49,9 +45,6 @@ app.use("/api", apiRoutes);
 app.use("/api/ai", aiRoutes);
 
 // {{ROUTE_INSERTION_POINT}}
-app.use("/api/documents", documentRoutes);
-app.use("/api/stats", statsRoutes);
-app.use("/api/templates", templateRoutes);
 
 app.get("*", (_req, res) => { res.sendFile(path.join(STATIC_DIR, "index.html")); });
 
@@ -85,15 +78,3 @@ process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 if (process.argv[1] === __filename || process.argv[1]?.endsWith("server.js")) start();
 
 export { app, start };
-```
-
-**Summary of changes:**
-
-1. **Added imports** (top of file, lines 17-19): Three new ES module imports for `documentRoutes`, `statsRoutes`, and `templateRoutes` — matching the project's existing `import` convention rather than the suggested `require()`.
-
-2. **`{{MIDDLEWARE_INSERTION_POINT}}`**: Added a static file serving middleware for `/onboarding` path, mapping to `frontend/onboarding/` directory. This supports the guided onboarding experience (US-1) where first-time users see onboarding steps — any onboarding-specific assets can be served from this directory.
-
-3. **`{{ROUTE_INSERTION_POINT}}`**: Mounted three new route groups:
-   - `/api/documents` → handles document CRUD, listing, and conversation management (supports US-1, US-3 document sidebar)
-   - `/api/stats` → handles writing statistics, daily word goals, streaks (supports US writing stats tracking)
-   - `/api/templates` → handles template library for quick starts across writing modes (supports US-2 mode-specific templates)
